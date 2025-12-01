@@ -2,6 +2,7 @@
     package="com.example.kitchenlife">
 
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:name=".KitchenLifeApp"
@@ -31,9 +32,7 @@
         <activity android:name=".ui.pantry.PantryActivity"/>
         <activity android:name=".ui.RecipeDetailActivity" />
         <activity android:name=".RecipePickerActivity" />
-        <activity
-            android:name=".ui.mealplan.HandsFreeCookingActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
+        <activity android:name="com.example.kitchenlife.ui.HandsFreeCookingActivity"
+            android:exported="false" />
     </application>
 </manifest>

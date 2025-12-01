@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <!-- 비활성화용 연한 그레이 -->
+    <solid android:color="#D6D6D6" />
+
+    <!-- 활성 버튼과 동일한 라운드 -->
+    <corners android:radius="18dp" />
+
+    <!-- 버튼 내부 padding (활성 버튼 스타일과 통일) -->
+    <padding
+        android:left="16dp"
+        android:right="16dp"
+        android:top="8dp"
+        android:bottom="8dp" />
+
+    <!-- 버튼 높이 고정 (통일감 유지) -->
+    <size android:height="52dp" />
+
+</shape>

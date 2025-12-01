@@ -211,14 +211,31 @@
                 android:text="다시 시도" />
         </LinearLayout>
     </FrameLayout>
-
-    <!-- 하단 CTA -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btn_start"
-        style="@style/Widget.MaterialComponents.Button"
+    <!-- 하단 CTA 버튼 2개 -->
+    <LinearLayout
+        android:id="@+id/layout_bottom_buttons"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="식단에 추가하기"
-        android:layout_margin="16dp" />
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:gravity="center">
+
+        <!-- 버튼 1: 식단에 추가하기 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_start"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="8dp"
+            android:text="식단에 추가하기" />
+
+        <!-- 버튼 2: 레시피 보기(핸즈프리) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_handsfree"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="레시피 보기" />
+    </LinearLayout>
 
 </LinearLayout>
