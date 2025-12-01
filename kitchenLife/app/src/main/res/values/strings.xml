@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- 기존 문자열 -->
+    <string name="app_name">Meal Planner</string>
+    <string name="navigation_drawer_open">Open navigation drawer</string>
+    <string name="navigation_drawer_close">Close navigation drawer</string>
+
+    <!-- 스마트 요리 도우미 화면 추가 문자열 -->
+    <string name="cooking_title">요리 이름</string>
+    <string name="back">뒤로가기</string>
+    <string name="more">더보기</string>
+
+    <!-- 하단 버튼 -->
+    <string name="prev">이전</string>
+    <string name="repeat">다시 읽어줘</string>
+    <string name="next">다음</string>
+
+    <!-- 화면 공통 텍스트 -->
+    <string name="mic_description">음성 인식 버튼</string>
+    <string name="timer_suggestion_format">%1$d분 타이머를 설정할까요?</string>
+
+</resources>

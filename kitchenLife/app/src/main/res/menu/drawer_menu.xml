@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_home"
+            android:icon="@android:drawable/ic_menu_compass"
+            android:title="Home" />
+        <item
+            android:id="@+id/nav_meal_plan"
+            android:icon="@android:drawable/ic_menu_agenda"
+            android:title="Meal Plan" />
+        <item
+            android:id="@+id/nav_shopping"
+            android:icon="@android:drawable/ic_menu_add"
+            android:title="Shopping" />
+        <item
+            android:id="@+id/nav_recipes"
+            android:icon="@android:drawable/ic_menu_info_details"
+            android:title="Recipes" />
+        <item
+            android:id="@+id/nav_pantry"
+            android:icon="@android:drawable/ic_menu_gallery"
+            android:title="Pantry" />
+        <!-- ⭐ 여기 새 항목 추가 -->
+        <item
+            android:id="@+id/nav_handsfree"
+            android:icon="@drawable/ic_mic_24"
+            android:title="Hands-Free Cooking" />
+    </group>
+</menu>
