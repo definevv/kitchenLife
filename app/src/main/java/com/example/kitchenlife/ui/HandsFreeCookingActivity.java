@@ -505,8 +505,10 @@ public class HandsFreeCookingActivity extends AppCompatActivity {
         }
 
         updateButtonState();
-        // 여기서는 자동으로 읽지 않음 (intro와 겹치지 않게)
-        // speakInstruction(instruction);
+        // ⭐ intro 음성이 끝난 상태에서만 자동 읽기
+        if (firstIntroDone) {
+            speakInstruction(instruction);
+        }
     }
 
     // -----------------------------
