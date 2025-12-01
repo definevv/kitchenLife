@@ -26,5 +26,9 @@
         <activity android:name=".PantryActivity" />
         <activity android:name=".RecipesActivity" />
         <activity android:name=".StatsActivity" />
+        <activity
+            android:name=".ui.mealplan.HandsFreeCookingActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
     </application>
 </manifest>
