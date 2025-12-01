@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp">
+
+    <!-- step badge -->
+    <TextView
+        android:id="@+id/tv_step_no"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:gravity="center"
+        android:text="1"
+        android:textColor="@android:color/white"
+        android:background="@drawable/bg_step_badge"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tv_step_desc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="설명이 여기에 표시됩니다."
+            android:textColor="@color/text_primary"
+            android:textSize="15sp" />
+
+        <!-- 선택: 팁이 있으면 보이도록 -->
+        <TextView
+            android:id="@+id/tv_step_tip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Tip: 불 세기는 중약불을 유지하세요."
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <!-- 선택: 이미지가 있으면 보이도록 -->
+        <ImageView
+            android:id="@+id/iv_step_img"
+            android:layout_width="match_parent"
+            android:layout_height="160dp"
+            android:layout_marginTop="8dp"
+            android:scaleType="centerCrop"
+            android:src="@color/placeholder_gray"
+            android:visibility="gone" />
+    </LinearLayout>
+</LinearLayout>

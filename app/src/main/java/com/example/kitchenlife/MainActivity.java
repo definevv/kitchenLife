@@ -10,8 +10,6 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.cardview.widget.CardView;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
-
-import com.example.kitchenlife.ui.mealplan.HandsFreeCookingActivity;
 import com.google.android.material.navigation.NavigationView;
 import android.view.Window;
 import androidx.core.content.ContextCompat;
@@ -94,9 +92,6 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             startActivity(new Intent(this, PantryActivity.class));
         } else if (id == R.id.nav_stats) {
             startActivity(new Intent(this, StatsActivity.class));
-        } else if (id == R.id.nav_handsfree) {
-            Intent intent = new Intent(MainActivity.this, HandsFreeCookingActivity.class);
-            startActivity(intent);
         }
 
         drawerLayout.closeDrawer(GravityCompat.START);

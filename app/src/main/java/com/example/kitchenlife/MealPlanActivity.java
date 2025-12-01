@@ -9,13 +9,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.TextView;
-import android.widget.AutoCompleteTextView;
-import android.widget.ArrayAdapter;
-import android.widget.Toast;
 
 import com.example.kitchenlife.data.MyMealSet;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
-import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.card.MaterialCardView;
@@ -27,7 +23,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import androidx.cardview.widget.CardView;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.DividerItemDecoration;
@@ -36,6 +31,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.kitchenlife.data.MealPlanEntry;
+import com.example.kitchenlife.net.SupabaseClient;
 import com.example.kitchenlife.ui.mealplan.MealPlanViewModel;
 
 import java.time.DayOfWeek;
@@ -46,14 +42,18 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * WEEK / MONTH 캘린더 + 레시피/내식단(MY MEALS) 바텀시트
- */
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+import retrofit2.http.GET;
+import retrofit2.http.Query;
+
+/** WEEK / MONTH 캘린더 + 레시피/내식단(MY MEALS) 바텀시트 */
 public class MealPlanActivity extends AppCompatActivity {
 
     // ───────── 상단 UI ─────────
     private RecyclerView rvBreakfast, rvLunch, rvDinner;
-    private CardView slotBreakfast, slotLunch, slotDinner;
+    private MaterialCardView slotBreakfast, slotLunch, slotDinner;
     private FloatingActionButton fabAdd;
     private TextView tvSelectedDay, tvRangeTitle;
     private MaterialButtonToggleGroup viewModeToggle;
@@ -80,8 +80,8 @@ public class MealPlanActivity extends AppCompatActivity {
     private MealPlanViewModel vm;
 
     private LocalDate selectedDate = LocalDate.now();  // 현재 선택 일자
-    private LocalDate weekAnchor   = LocalDate.now();  // 주 뷰의 기준(선택일 포함 주)
-    private YearMonth monthAnchor  = YearMonth.now();  // 월 뷰의 기준
+    private LocalDate weekAnchor   = LocalDate.now();  // 주 뷰 기준
+    private YearMonth monthAnchor  = YearMonth.now();  // 월 뷰 기준
 
     private int editingMealType = 0; // 0=B,1=L,2=D
     @Nullable private MealPlanEntry editingEntry = null;
@@ -93,7 +93,7 @@ public class MealPlanActivity extends AppCompatActivity {
     private RecipeAdapter     recipeAdapter;
     private MyMealsAdapter    myMealsAdapter;
 
-    // 데이터(로컬)
+    // 데이터(레시피: Supabase → 메모리 목록)
     private final List<Recipe> masterRecipes = new ArrayList<>();
     @Nullable private Recipe selectedRecipe = null;
 
@@ -101,8 +101,26 @@ public class MealPlanActivity extends AppCompatActivity {
     @Nullable private MyMealSet selectedSet = null;
     @Nullable private LiveData<List<MyMealSet>> myMealsLive = null;
 
+    // 상세 → 식단 연동을 위한 보류 인텐트 값 (레시피 리스트 로드 후 처리)
+    @Nullable private Long pendingRecipeId = null;
+    @Nullable private String pendingRecipeTitle = null;
+    @Nullable private Integer pendingMealType = null;
+
     private final DateTimeFormatter weekTitleFmt = DateTimeFormatter.ofPattern("'Week of' yyyy-MM-dd");
     private final DateTimeFormatter dayLabelFmt  = DateTimeFormatter.ofPattern("EEEE, d");
+
+    // ───────── Supabase 간단 목록 API (id, title 만) ─────────
+    interface LocalApi {
+        @GET("/rest/v1/v_recipes")
+        Call<List<Recipe>> listRecipes(
+                @Query("select") String select,                // "id,title"
+                @Query("order") String order,                  // "created_at.desc"
+                @Query("limit") Integer limit,                 // 예: 500
+                @Query("offset") Integer offset,               // 예: 0
+                @Query("title") String titleFilterLike         // "ilike.*키워드*"
+        );
+    }
+    private LocalApi api() { return SupabaseClient.get().create(LocalApi.class); }
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -122,18 +140,36 @@ public class MealPlanActivity extends AppCompatActivity {
         setupCalendarLists();
         setupBottomSheet();
         setupMealLists();
-        seedRecipes();
         observeMealsForDay();
-        bindClicks();
 
-        // 초기 렌더: WEEK 활성화 + 타이틀/리스트
+        // 초기 렌더
         viewModeToggle.check(R.id.btn_week);
         viewFlipper.showWeek();
         updateWeekTitle();
         renderSelectedDayLabel();
         renderWeekStrip();
         renderMonthGrid();
-        recipeAdapter.submit(new ArrayList<>(masterRecipes));
+
+        // 레시피 목록 Supabase에서 로드 (실패 시 시드 사용)
+        fetchRecipes(null);
+
+        // 상세 화면에서 넘어온 경우 처리
+        readIntentFromRecipeDetail();
+
+        long fromId = getIntent().getLongExtra("from_recipe_id", -1);
+        String fromTitle = getIntent().getStringExtra("from_recipe_title");
+
+        if (fromId > 0) {
+            // 1) 레시피 탭으로 시트 열기
+            recipeModeToggle.check(R.id.btn_mode_recipes);
+            sheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+
+            // 2) 검색어 채워서 기존 TextWatcher가 필터링하게 만들기
+            if (fromTitle != null) etRecipeSearch.setText(fromTitle);
+
+            // 3) 리스트가 갱신된 뒤 해당 id를 선택 표시
+            rvRecipeLibrary.post(() -> recipeAdapter.selectById(fromId));
+        }
     }
 
     private void bindViews() {
@@ -180,21 +216,20 @@ public class MealPlanActivity extends AppCompatActivity {
 
     // ───────── Calendar Lists ─────────
     private void setupCalendarLists() {
-        // Week strip (가로 7칩)
+        // Week strip
         weekDaysAdapter = new WeekDaysAdapter(d -> {
             selectedDate = d;
             renderSelectedDayLabel();
-            observeMealsForDay(); // 선택 바뀌면 끼니 목록도 바뀜
+            observeMealsForDay();
             weekDaysAdapter.setSelected(d);
         });
-        rvWeekDays.setLayoutManager(
-                new LinearLayoutManager(this, RecyclerView.HORIZONTAL, false));
+        rvWeekDays.setLayoutManager(new LinearLayoutManager(this, RecyclerView.HORIZONTAL, false));
         rvWeekDays.setAdapter(weekDaysAdapter);
 
-        // Month grid (7x6)
+        // Month grid
         monthGridAdapter = new MonthGridAdapter(day -> {
             selectedDate = day;
-            weekAnchor   = day; // 주기준도 같이 맞춰줌
+            weekAnchor   = day;
             btnWeek.setChecked(true);
             viewFlipper.showWeek();
             renderWeekStrip();
@@ -221,36 +256,26 @@ public class MealPlanActivity extends AppCompatActivity {
         findViewById(R.id.btn_prev_range).setOnClickListener(v -> {
             if (btnWeek.isChecked()) {
                 weekAnchor = weekAnchor.minusWeeks(1);
-                renderWeekStrip();
-                updateWeekTitle();
+                renderWeekStrip(); updateWeekTitle();
             } else {
                 monthAnchor = monthAnchor.minusMonths(1);
-                renderMonthGrid();
-                updateMonthTitle();
+                renderMonthGrid(); updateMonthTitle();
             }
         });
         findViewById(R.id.btn_next_range).setOnClickListener(v -> {
             if (btnWeek.isChecked()) {
                 weekAnchor = weekAnchor.plusWeeks(1);
-                renderWeekStrip();
-                updateWeekTitle();
+                renderWeekStrip(); updateWeekTitle();
             } else {
                 monthAnchor = monthAnchor.plusMonths(1);
-                renderMonthGrid();
-                updateMonthTitle();
+                renderMonthGrid(); updateMonthTitle();
             }
         });
     }
 
-    private void updateWeekTitle() {
-        tvRangeTitle.setText(selectedDate.format(weekTitleFmt));
-    }
-    private void updateMonthTitle() {
-        tvRangeTitle.setText(monthAnchor.getMonth().name() + " " + monthAnchor.getYear());
-    }
-    private void renderSelectedDayLabel() {
-        tvSelectedDay.setText(selectedDate.format(dayLabelFmt));
-    }
+    private void updateWeekTitle() { tvRangeTitle.setText(selectedDate.format(weekTitleFmt)); }
+    private void updateMonthTitle() { tvRangeTitle.setText(monthAnchor.getMonth().name() + " " + monthAnchor.getYear()); }
+    private void renderSelectedDayLabel() { tvSelectedDay.setText(selectedDate.format(dayLabelFmt)); }
     private void renderWeekStrip() {
         LocalDate start = weekStart(weekAnchor, DayOfWeek.SUNDAY);
         List<LocalDate> seven = new ArrayList<>(7);
@@ -258,20 +283,14 @@ public class MealPlanActivity extends AppCompatActivity {
         weekDaysAdapter.submit(seven, selectedDate);
         rvWeekDays.scrollToPosition(selectedDate.getDayOfWeek().getValue() % 7);
     }
-    private void renderMonthGrid() {
-        monthGridAdapter.submit(monthAnchor, selectedDate);
-    }
-    private static LocalDate weekStart(LocalDate any, DayOfWeek first) {
-        return any.with(TemporalAdjusters.previousOrSame(first));
-    }
+    private void renderMonthGrid() { monthGridAdapter.submit(monthAnchor, selectedDate); }
+    private static LocalDate weekStart(LocalDate any, DayOfWeek first) { return any.with(TemporalAdjusters.previousOrSame(first)); }
 
     // ───────── BottomSheet ─────────
     private void setupBottomSheet() {
         sheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
 
-        btnCloseSheet.setOnClickListener(v ->
-                sheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN));
-
+        btnCloseSheet.setOnClickListener(v -> sheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN));
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override public void handleOnBackPressed() {
                 if (sheetBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED) {
@@ -290,17 +309,16 @@ public class MealPlanActivity extends AppCompatActivity {
             @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
             @Override public void onTextChanged(CharSequence s, int st, int b, int c) {
                 String q = s == null ? "" : s.toString().trim();
-
                 int checked = recipeModeToggle.getCheckedButtonId();
                 if (checked == R.id.btn_mode_recipes) {
-                    // 레시피 필터
+                    // 로컬 필터
                     List<Recipe> filtered = new ArrayList<>();
                     for (Recipe r : masterRecipes)
-                        if (r.title.toLowerCase().contains(q.toLowerCase())) filtered.add(r);
+                        if (r.title != null && r.title.toLowerCase().contains(q.toLowerCase())) filtered.add(r);
                     recipeAdapter.submit(filtered);
                     tvEmptyRecipes.setVisibility(filtered.isEmpty() ? View.VISIBLE : View.GONE);
                 } else {
-                    // MY MEALS는 Room 쿼리로 검색
+                    // MY MEALS 검색(Room)
                     if (myMealsLive != null) myMealsLive.removeObservers(MealPlanActivity.this);
                     myMealsLive = vm.searchMyMealSets(q);
                     myMealsLive.observe(MealPlanActivity.this, list -> {
@@ -315,26 +333,23 @@ public class MealPlanActivity extends AppCompatActivity {
         });
 
         recipeModeToggle.check(R.id.btn_mode_recipes);
-        btnPrimarySheet.setText("ADD TO MEAL");
+        btnPrimarySheet.setText("식단에 추가");
         btnPrimarySheet.setOnClickListener(v -> onClickPrimaryInRecipesMode());
     }
 
-    // ───────── 바텀시트 모드 전환 ─────────
     private void showRecipesMode() {
         groupRecipes.setVisibility(View.VISIBLE);
         groupMyMeals.setVisibility(View.GONE);
-
-        btnPrimarySheet.setText(editingEntry == null ? "ADD TO MEAL" : "UPDATE MEAL");
         btnPrimarySheet.setVisibility(View.VISIBLE);
+        btnPrimarySheet.setText(editingEntry == null ? "식단에 추가" : "식단 수정");
         btnPrimarySheet.setOnClickListener(v -> onClickPrimaryInRecipesMode());
     }
 
     private void showMyMealsMode() {
         groupRecipes.setVisibility(View.GONE);
         groupMyMeals.setVisibility(View.VISIBLE);
-
         btnPrimarySheet.setVisibility(View.VISIBLE);
-        btnPrimarySheet.setText("ADD TO MEAL");
+        btnPrimarySheet.setText("식단에 추가");
         btnPrimarySheet.setOnClickListener(v -> onClickPrimaryInMyMealsMode());
 
         if (myMealsLive != null) myMealsLive.removeObservers(this);
@@ -347,86 +362,28 @@ public class MealPlanActivity extends AppCompatActivity {
         });
     }
 
-    private static class RecipePayload {
-        String ingredients; // 줄바꿈으로 구분된 재료
-        String steps;       // 줄바꿈으로 구분된 단계
-        String tags;        // 콤마 구분 태그
-        String note;        // 메모
-    }
-
-    private String toRecipeJson(String ingredients, String steps, String tags, String note) {
-        // 매우 가벼운 JSON 직렬화 (의존성 없이)
-        // 줄바꿈은 \n 그대로 저장
-        String esc = "\"";
-        return "{"
-                + "\"ingredients\":" + esc + ingredients.replace("\"","\\\"") + esc + ","
-                + "\"steps\":"       + esc + steps.replace("\"","\\\"")       + esc + ","
-                + "\"tags\":"        + esc + tags.replace("\"","\\\"")        + esc + ","
-                + "\"note\":"        + esc + note.replace("\"","\\\"")        + esc
-                + "}";
-    }
-
-    @Nullable
-    private RecipePayload parseRecipeJson(@Nullable String json) {
-        if (json == null || json.trim().isEmpty()) return null;
-        RecipePayload p = new RecipePayload();
-        try {
-            // 아주 단순 파서(프로덕션이면 Gson/Moshi 권장)
-            String s = json;
-            p.ingredients = between(s, "\"ingredients\":\"", "\"", true);
-            p.steps       = between(s, "\"steps\":\"",       "\"", true);
-            p.tags        = between(s, "\"tags\":\"",        "\"", true);
-            p.note        = between(s, "\"note\":\"",        "\"", true);
-            if (p.ingredients == null) p.ingredients = "";
-            if (p.steps == null)       p.steps = "";
-            if (p.tags == null)        p.tags = "";
-            if (p.note == null)        p.note = "";
-            return p;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /** "prefix ... suffix" 사이 값 꺼내기 */
-    @Nullable
-    private String between(String s, String prefix, String suffix, boolean unescapeQuotes) {
-        int a = s.indexOf(prefix);
-        if (a < 0) return null;
-        a += prefix.length();
-        int b = s.indexOf(suffix, a);
-        if (b < 0) return null;
-        String v = s.substring(a, b);
-        return unescapeQuotes ? v.replace("\\\"", "\"") : v;
-    }
-
-
     // ───────── 시트 내부 동작 ─────────
     private void onClickPrimaryInRecipesMode() {
         if (selectedRecipe == null) return;
         long key = dateKey(selectedDate);
-        if (editingEntry == null) {
-            vm.add(key, editingMealType, selectedRecipe.title);
-        } else {
-            vm.update(editingEntry, selectedRecipe.title);
-        }
+        if (editingEntry == null) vm.add(key, editingMealType, selectedRecipe.title);
+        else vm.update(editingEntry, selectedRecipe.title);
         sheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
     }
 
     private void onClickPrimaryInMyMealsMode() {
         if (selectedSet == null) {
-            Toast.makeText(this, "Select a meal set.", Toast.LENGTH_SHORT).show();
+            android.widget.Toast.makeText(this, "세트를 선택하세요.", android.widget.Toast.LENGTH_SHORT).show();
             return;
         }
         String title = selectedSet.name == null ? "" : selectedSet.name.trim();
         if (title.isEmpty()) {
-            android.widget.Toast.makeText(this, "Selected recipe has no title.", android.widget.Toast.LENGTH_SHORT).show();
+            android.widget.Toast.makeText(this, "선택한 세트에 제목이 없습니다.", android.widget.Toast.LENGTH_SHORT).show();
             return;
         }
-
         long key = dateKey(selectedDate);
         if (editingEntry == null) vm.add(key, editingMealType, title);
         else vm.update(editingEntry, title);
-
         sheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
     }
 
@@ -444,6 +401,7 @@ public class MealPlanActivity extends AppCompatActivity {
         rvLunch.setAdapter(lunchAdapter);
         rvDinner.setAdapter(dinnerAdapter);
 
+        // 레시피 리스트
         recipeAdapter = new RecipeAdapter(r -> {
             selectedRecipe = r;
             recipeAdapter.setSelectedId(r.id);
@@ -452,18 +410,11 @@ public class MealPlanActivity extends AppCompatActivity {
         rvRecipeLibrary.addItemDecoration(new DividerItemDecoration(this, DividerItemDecoration.VERTICAL));
         rvRecipeLibrary.setAdapter(recipeAdapter);
 
-        // MY MEALS 리스트
+        // MY MEALS
         myMealsAdapter = new MyMealsAdapter(new MyMealsAdapter.OnPick() {
-            @Override public void onPick(MyMealSet s) {
-                selectedSet = s;
-                myMealsAdapter.setSelectedId(s.id);
-            }
-            @Override public void onEdit(MyMealSet s) {
-                openMyMealEditorPrefilled(s);
-            }
-            @Override public void onDelete(MyMealSet s) {
-                vm.deleteMyMealSet(s);
-            }
+            @Override public void onPick(MyMealSet s) { selectedSet = s; myMealsAdapter.setSelectedId(s.id); }
+            @Override public void onEdit(MyMealSet s) { openMyMealEditorPrefilled(s); }
+            @Override public void onDelete(MyMealSet s) { vm.deleteMyMealSet(s); }
         });
         rvMyMeals.setLayoutManager(new LinearLayoutManager(this));
         rvMyMeals.addItemDecoration(new DividerItemDecoration(this, DividerItemDecoration.VERTICAL));
@@ -494,14 +445,13 @@ public class MealPlanActivity extends AppCompatActivity {
         selectedSet = null;    myMealsAdapter.setSelectedId(null);
 
         int checked = recipeModeToggle.getCheckedButtonId();
-        if (checked == R.id.btn_mode_recipes) showRecipesMode();
-        else showMyMealsMode();
+        if (checked == R.id.btn_mode_recipes) showRecipesMode(); else showMyMealsMode();
 
         sheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
     }
 
     // ───────── My Meals 에디터 ─────────
-    private void openMyMealEditorPrefilled(com.example.kitchenlife.data.MyMealSet s) {
+    private void openMyMealEditorPrefilled(MyMealSet s) {
         com.google.android.material.bottomsheet.BottomSheetDialog dlg =
                 new com.google.android.material.bottomsheet.BottomSheetDialog(this);
         View content = getLayoutInflater().inflate(R.layout.sheet_my_meal_editor, null, false);
@@ -516,7 +466,6 @@ public class MealPlanActivity extends AppCompatActivity {
 
         etTitle.setText(s.name);
 
-        // notes(JSON) → 폼에 되살리기
         RecipePayload p = parseRecipeJson(s.notes);
         if (p != null) {
             etIngr.setText(p.ingredients);
@@ -525,7 +474,7 @@ public class MealPlanActivity extends AppCompatActivity {
             etNotes.setText(p.note);
         }
 
-        btnSave.setText("UPDATE RECIPE");
+        btnSave.setText("레시피 수정");
         btnSave.setOnClickListener(v -> {
             s.name  = safe(etTitle.getText());
             s.notes = toRecipeJson(
@@ -535,7 +484,7 @@ public class MealPlanActivity extends AppCompatActivity {
                     safe(etNotes.getText())
             );
             vm.saveMyMealSet(s);
-            android.widget.Toast.makeText(this, "Updated recipe", android.widget.Toast.LENGTH_SHORT).show();
+            android.widget.Toast.makeText(this, "수정 완료", android.widget.Toast.LENGTH_SHORT).show();
             dlg.dismiss();
         });
 
@@ -555,14 +504,12 @@ public class MealPlanActivity extends AppCompatActivity {
         TextInputEditText etNotes = content.findViewById(R.id.et_notes);
         MaterialButton btnSave    = content.findViewById(R.id.btn_save_recipe);
 
+        btnSave.setText("레시피 저장");
         btnSave.setOnClickListener(v -> {
             String title = safe(etTitle.getText());
-            if (title.isEmpty()) { etTitle.setError("Please enter recipe title"); return; }
+            if (title.isEmpty()) { etTitle.setError("레시피 제목을 입력하세요"); return; }
 
-            // MyMealSet 을 "내 레시피" 용도로 재사용:
-            //  - name  : 레시피 제목
-            //  - notes : JSON(ingredients/steps/tags/notes)로 직렬화
-            com.example.kitchenlife.data.MyMealSet set = new com.example.kitchenlife.data.MyMealSet();
+            MyMealSet set = new MyMealSet();
             set.name  = title;
             set.notes = toRecipeJson(
                     safe(etIngr.getText()),
@@ -570,18 +517,15 @@ public class MealPlanActivity extends AppCompatActivity {
                     safe(etTags.getText()),
                     safe(etNotes.getText())
             );
-
             vm.saveMyMealSet(set);
-            android.widget.Toast.makeText(this, "Saved recipe", android.widget.Toast.LENGTH_SHORT).show();
+            android.widget.Toast.makeText(this, "저장 완료", android.widget.Toast.LENGTH_SHORT).show();
             dlg.dismiss();
         });
 
         dlg.show();
     }
 
-    private static String safe(@Nullable CharSequence cs) {
-        return cs == null ? "" : cs.toString().trim();
-    }
+    private static String safe(@Nullable CharSequence cs) { return cs == null ? "" : cs.toString().trim(); }
 
     // ───────── 어댑터들 ─────────
 
@@ -593,19 +537,14 @@ public class MealPlanActivity extends AppCompatActivity {
         private @Nullable LocalDate selected;
 
         WeekDaysAdapter(OnPick onPick) { this.onPick = onPick; }
-        void submit(List<LocalDate> list, @Nullable LocalDate sel) {
-            days.clear(); days.addAll(list); selected = sel; notifyDataSetChanged();
-        }
+        void submit(List<LocalDate> list, @Nullable LocalDate sel) { days.clear(); days.addAll(list); selected = sel; notifyDataSetChanged(); }
         void setSelected(LocalDate d) { selected = d; notifyDataSetChanged(); }
 
         @NonNull @Override public VH onCreateViewHolder(@NonNull ViewGroup p, int v) {
             View view = LayoutInflater.from(p.getContext()).inflate(R.layout.item_week_day, p, false);
             return new VH(view);
         }
-        @Override public void onBindViewHolder(@NonNull VH h, int pos) {
-            LocalDate d = days.get(pos);
-            h.bind(d, selected, onPick);
-        }
+        @Override public void onBindViewHolder(@NonNull VH h, int pos) { h.bind(days.get(pos), selected, onPick); }
         @Override public int getItemCount() { return days.size(); }
 
         static class VH extends RecyclerView.ViewHolder {
@@ -639,9 +578,7 @@ public class MealPlanActivity extends AppCompatActivity {
         MonthGridAdapter(OnPick onPick) { this.onPick = onPick; }
 
         void submit(YearMonth ym, @Nullable LocalDate sel) {
-            anchor = ym;
-            selected = sel;
-            cells.clear();
+            anchor = ym; selected = sel; cells.clear();
             LocalDate first = ym.atDay(1);
             LocalDate start = first.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
             for (int i=0;i<42;i++) cells.add(start.plusDays(i));
@@ -661,13 +598,8 @@ public class MealPlanActivity extends AppCompatActivity {
         @Override public int getItemCount() { return cells.size(); }
 
         static class VH extends RecyclerView.ViewHolder {
-            TextView tv;
-            MaterialCardView card;
-            VH(@NonNull View itemView) {
-                super(itemView);
-                card = (MaterialCardView) itemView;
-                tv   = itemView.findViewById(R.id.tv_month_day);
-            }
+            TextView tv; MaterialCardView card;
+            VH(@NonNull View itemView) { super(itemView); card = (MaterialCardView) itemView; tv = itemView.findViewById(R.id.tv_month_day); }
             void bind(LocalDate d, boolean inMonth, boolean selected, OnPick onPick) {
                 tv.setText(String.valueOf(d.getDayOfMonth()));
                 tv.setAlpha(inMonth ? 1f : 0.35f);
@@ -685,9 +617,7 @@ public class MealPlanActivity extends AppCompatActivity {
         private final List<MealPlanEntry> items = new ArrayList<>();
         MealEntryAdapter(IMealSlotListener l){ listener=l; }
 
-        void submit(@Nullable List<MealPlanEntry> list) {
-            items.clear(); if (list != null) items.addAll(list); notifyDataSetChanged();
-        }
+        void submit(@Nullable List<MealPlanEntry> list) { items.clear(); if (list != null) items.addAll(list); notifyDataSetChanged(); }
         @Override public int getItemViewType(int pos){ return items.isEmpty()?TYPE_EMPTY:TYPE_ITEM; }
 
         @NonNull @Override public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup p,int vt){
@@ -717,7 +647,7 @@ public class MealPlanActivity extends AppCompatActivity {
             void bind(MealPlanEntry e, IMealSlotListener l){
                 tvTitle.setText(e.title);
                 btnEdit.setOnClickListener(v->l.onEdit(e));
-                btnDelete.setOnClickListener(v->l.onDelete(e)); // 즉시 삭제
+                btnDelete.setOnClickListener(v->l.onDelete(e));
             }
         }
     }
@@ -727,6 +657,14 @@ public class MealPlanActivity extends AppCompatActivity {
         interface OnPick { void onPick(Recipe r); }
         private final OnPick onPick;
         private final List<Recipe> items = new ArrayList<>();
+
+        // MealPlanActivity.java - RecipeAdapter 내부에 추가
+        void selectById(long id){
+            selectedId = id;
+            notifyDataSetChanged();
+        }
+        List<Recipe> currentItems(){ return new ArrayList<>(items); } // 필요시 사용
+
         @Nullable private Long selectedId=null;
 
         RecipeAdapter(OnPick p){ onPick=p; }
@@ -745,11 +683,11 @@ public class MealPlanActivity extends AppCompatActivity {
         }
         @Override public int getItemCount(){ return items.size(); }
         static class VH extends RecyclerView.ViewHolder{
-            TextView tvTitle; VH(@NonNull View itemView){ super(itemView); tvTitle=itemView.findViewById(R.id.tv_title);}
+            TextView tvTitle; VH(@NonNull View itemView){ super(itemView); tvTitle=itemView.findViewById(R.id.tv_title); }
         }
     }
 
-    /** MY MEALS 리스트 어댑터 */
+    /** MY MEALS 리스트 */
     private static class MyMealsAdapter extends RecyclerView.Adapter<MyMealsAdapter.VH> {
         interface OnPick { void onPick(MyMealSet s); void onEdit(MyMealSet s); void onDelete(MyMealSet s); }
         private final OnPick onPick;
@@ -783,14 +721,8 @@ public class MealPlanActivity extends AppCompatActivity {
             if (s.breakfastTitle!=null) meta += "B: "+s.breakfastTitle+"  ";
             if (s.lunchTitle!=null)     meta += "L: "+s.lunchTitle+"  ";
             if (s.dinnerTitle!=null)    meta += "D: "+s.dinnerTitle;
-
-            if (meta.trim().isEmpty()) {
-                h.tvMeta.setVisibility(View.GONE);      // ★ 빈 경우 감추기
-            } else {
-                h.tvMeta.setVisibility(View.VISIBLE);   // ★ 재활용 대비 다시 보이게
-                h.tvMeta.setText(meta);
-            }
-
+            if (meta.trim().isEmpty()) { h.tvMeta.setVisibility(View.GONE);
+            } else { h.tvMeta.setVisibility(View.VISIBLE); h.tvMeta.setText(meta); }
             h.itemView.setOnClickListener(v -> onPick.onPick(s));
             h.btnEdit.setOnClickListener(v -> onPick.onEdit(s));
             h.btnDelete.setOnClickListener(v -> onPick.onDelete(s));
@@ -798,30 +730,135 @@ public class MealPlanActivity extends AppCompatActivity {
         @Override public int getItemCount(){ return items.size(); }
     }
 
-    // 리스너들
     private class SlotListener implements IMealSlotListener {
         private final int mealType; SlotListener(int m){ mealType=m; }
         @Override public void onAdd(){ openSheetForAddOrEdit(mealType,null); }
         @Override public void onEdit(MealPlanEntry e){ openSheetForAddOrEdit(mealType,e); }
         @Override public void onDelete(MealPlanEntry e){ vm.delete(e); }
     }
-    private interface IMealSlotListener {
-        void onAdd(); void onEdit(MealPlanEntry e); void onDelete(MealPlanEntry e);
-    }
+    private interface IMealSlotListener { void onAdd(); void onEdit(MealPlanEntry e); void onDelete(MealPlanEntry e); }
 
     // ───────── 유틸/데이터 ─────────
-    public static class Recipe { public long id; public String title; public Recipe(long id,String t){this.id=id;this.title=t;} }
+    public static class Recipe { public long id; public String title; }
 
     private long dateKey(LocalDate d){ return d.getYear()*10000L + d.getMonthValue()*100L + d.getDayOfMonth(); }
-    private void seedRecipes(){
-        masterRecipes.add(new Recipe(1,"Fried Rice"));
-        masterRecipes.add(new Recipe(2,"Chicken Salad"));
-        masterRecipes.add(new Recipe(3,"Tomato Pasta"));
-        masterRecipes.add(new Recipe(4,"Kimchi Stew"));
-        masterRecipes.add(new Recipe(5,"Grilled Salmon"));
+
+    // Supabase에서 레시피 목록 로드
+    private void fetchRecipes(@Nullable String titleLike){
+        final String select = "id,title";
+        final String order  = "created_at.desc";
+        Integer limit = 500, offset = 0;
+        String titleFilter = (titleLike==null || titleLike.isEmpty()) ? null : "ilike.*"+titleLike+"*";
+
+        api().listRecipes(select, order, limit, offset, titleFilter).enqueue(new Callback<List<Recipe>>() {
+            @Override public void onResponse(@NonNull Call<List<Recipe>> c, @NonNull Response<List<Recipe>> r) {
+                if (r.isSuccessful() && r.body()!=null) {
+                    masterRecipes.clear();
+                    masterRecipes.addAll(r.body());
+                    recipeAdapter.submit(new ArrayList<>(masterRecipes));
+                    tvEmptyRecipes.setVisibility(masterRecipes.isEmpty()?View.VISIBLE:View.GONE);
+                    tryFulfillPendingSelection();
+                } else {
+                    // 실패 시 시드
+                    seedRecipes();
+                    recipeAdapter.submit(new ArrayList<>(masterRecipes));
+                    tryFulfillPendingSelection();
+                }
+            }
+            @Override public void onFailure(@NonNull Call<List<Recipe>> c, @NonNull Throwable t) {
+                seedRecipes();
+                recipeAdapter.submit(new ArrayList<>(masterRecipes));
+                tryFulfillPendingSelection();
+            }
+        });
     }
 
-    /** 내 식단 세트 모델 (Room 연동 전 임시/또는 Room 엔티티와 동일 필드) */
+    private void seedRecipes(){
+        if (!masterRecipes.isEmpty()) return;
+        Recipe a = new Recipe(); a.id=1; a.title="Fried Rice";
+        Recipe b = new Recipe(); b.id=2; b.title="Chicken Salad";
+        Recipe c = new Recipe(); c.id=3; c.title="Tomato Pasta";
+        Recipe d = new Recipe(); d.id=4; d.title="Kimchi Stew";
+        Recipe e = new Recipe(); e.id=5; e.title="Grilled Salmon";
+        masterRecipes.add(a); masterRecipes.add(b); masterRecipes.add(c); masterRecipes.add(d); masterRecipes.add(e);
+    }
+
+    // 상세 → 식단 인텐트 처리
+    private void readIntentFromRecipeDetail() {
+        boolean fromRecipe = getIntent().getBooleanExtra("from_recipe", false);
+        if (!fromRecipe) return;
+
+        long rid = getIntent().getLongExtra("recipe_id", -1);
+        String rtitle = getIntent().getStringExtra("recipe_title");
+        int prefMeal = getIntent().getIntExtra("pref_meal_type", -1); // 0/1/2 or -1
+
+        pendingMealType = (prefMeal >= 0 && prefMeal <= 2) ? prefMeal : 1; // 기본 점심
+        pendingRecipeId = (rid > 0) ? rid : null;
+        pendingRecipeTitle = (rtitle != null && !rtitle.trim().isEmpty()) ? rtitle.trim() : null;
+
+        // 레시피 목록이 아직 안찼을 수 있으니, 로드가 끝난 뒤에 시도
+        tryFulfillPendingSelection();
+    }
+
+    private void tryFulfillPendingSelection() {
+        if (masterRecipes.isEmpty()) return; // 아직 안 불러옴
+
+        Recipe found = null;
+        if (pendingRecipeId != null) {
+            for (Recipe r : masterRecipes) if (r.id == pendingRecipeId) { found = r; break; }
+        }
+        if (found == null && pendingRecipeTitle != null) {
+            for (Recipe r : masterRecipes) if (pendingRecipeTitle.equalsIgnoreCase(r.title)) { found = r; break; }
+        }
+        if (found == null) return; // 못찾음
+
+        // 선택 적용 + 시트 열기
+        selectedRecipe = found;
+        recipeAdapter.setSelectedId(found.id);
+        recipeModeToggle.check(R.id.btn_mode_recipes);
+
+        int mt = (pendingMealType != null) ? pendingMealType : 1;
+        openSheetForAddOrEdit(mt, null);
+
+        // 1회성 처리 완료
+        pendingRecipeId = null; pendingRecipeTitle = null; pendingMealType = null;
+    }
+
+    // ───────── 메모(JSON) 직렬화/파싱 ─────────
+    private static class RecipePayload { String ingredients; String steps; String tags; String note; }
+
+    private String toRecipeJson(String ingredients, String steps, String tags, String note) {
+        String esc = "\"";
+        return "{"
+                + "\"ingredients\":" + esc + ingredients.replace("\"","\\\"") + esc + ","
+                + "\"steps\":"       + esc + steps.replace("\"","\\\"")       + esc + ","
+                + "\"tags\":"        + esc + tags.replace("\"","\\\"")        + esc + ","
+                + "\"note\":"        + esc + note.replace("\"","\\\"")        + esc
+                + "}";
+    }
+
+    @Nullable private RecipePayload parseRecipeJson(@Nullable String json) {
+        if (json == null || json.trim().isEmpty()) return null;
+        RecipePayload p = new RecipePayload();
+        try {
+            String s = json;
+            p.ingredients = between(s, "\"ingredients\":\"", "\"", true);
+            p.steps       = between(s, "\"steps\":\"",       "\"", true);
+            p.tags        = between(s, "\"tags\":\"",        "\"", true);
+            p.note        = between(s, "\"note\":\"",        "\"", true);
+            if (p.ingredients == null) p.ingredients = "";
+            if (p.steps == null)       p.steps = "";
+            if (p.tags == null)        p.tags = "";
+            if (p.note == null)        p.note = "";
+            return p;
+        } catch (Exception e) { return null; }
+    }
+    @Nullable private String between(String s, String prefix, String suffix, boolean unescapeQuotes) {
+        int a = s.indexOf(prefix); if (a < 0) return null; a += prefix.length();
+        int b = s.indexOf(suffix, a); if (b < 0) return null;
+        String v = s.substring(a, b);
+        return unescapeQuotes ? v.replace("\\\"", "\"") : v;
+    }
 
     // ViewFlipper helper (0=week, 1=month)
     private static class ViewFlipperCompat {
