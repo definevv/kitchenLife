@@ -6,28 +6,43 @@
     android:padding="12dp"
     android:gravity="center_vertical">
 
+    <!-- 체크박스: 먹음 완료 -->
+    <CheckBox
+        android:id="@+id/cb_done"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="12dp"
+        android:contentDescription="완료 체크" />
+
+    <!-- Title -->
     <TextView
         android:id="@+id/tv_title"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:text="Meal item"
         android:textSize="16sp"
-        android:textColor="@android:color/black" />
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorPrimary" />
 
-    <ImageButton
+    <!-- Edit text button -->
+    <TextView
         android:id="@+id/btn_edit"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:contentDescription="Edit"
-        android:src="@android:drawable/ic_menu_edit" />
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="수정"
+        android:textSize="14sp"
+        android:padding="8dp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:background="?attr/selectableItemBackgroundBorderless" />
 
-    <ImageButton
+    <!-- Delete text button -->
+    <TextView
         android:id="@+id/btn_delete"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:contentDescription="Delete"
-        android:src="@android:drawable/ic_menu_delete" />
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="삭제"
+        android:textSize="14sp"
+        android:padding="8dp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:background="?attr/selectableItemBackgroundBorderless" />
 </LinearLayout>

@@ -117,7 +117,7 @@ public class RecipesActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
         if(getSupportActionBar()!=null){
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-            getSupportActionBar().setTitle("Recipes");
+            getSupportActionBar().setTitle("레시피");
         }
         toolbar.setNavigationOnClickListener(v -> finish());
     }

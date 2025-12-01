@@ -17,7 +17,7 @@
             android:layout_height="?attr/actionBarSize"
             android:background="@color/header_gray"
             android:elevation="4dp"
-            app:title="Pick a recipe"
+            app:title="레시피 고르기"
             app:titleTextColor="@color/text_primary"/>
     </com.google.android.material.appbar.AppBarLayout>
 

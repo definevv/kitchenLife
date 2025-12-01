@@ -8,80 +8,81 @@ import androidx.room.Query;
 import androidx.room.Transaction;
 import androidx.room.Update;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Dao
 public interface ShoppingDao {
 
     /* ---------- 조회 ---------- */
 
-    /** 최신 수정순 전체 목록 (동기) */
+    /** 동기: updatedAt desc 정렬 전체 */
     @Query("SELECT * FROM shopping_items ORDER BY updatedAt DESC")
     List<ShoppingItem> loadAll();
 
-    /** 최신 수정순 전체 관찰 (LiveData) */
+    /** 관찰: updatedAt desc 정렬 전체 */
     @Query("SELECT * FROM shopping_items ORDER BY updatedAt DESC")
     LiveData<List<ShoppingItem>> observeAll();
 
-    /** 이름+단위로 1건 조회 (단위가 NULL일 때도 매칭되도록) */
+    /** 동기: 정렬/보존 로직용 전체(정렬 불문) */
+    @Query("SELECT * FROM shopping_items")
+    List<ShoppingItem> allSync();
+
     @Query("SELECT * FROM shopping_items " +
             "WHERE name = :name AND ((unit IS NULL AND :unit IS NULL) OR unit = :unit) " +
             "LIMIT 1")
     ShoppingItem byNameUnitSync(String name, String unit);
 
-    /** 키(ingredientKey)로 1건 조회 */
     @Query("SELECT * FROM shopping_items WHERE ingredientKey = :key LIMIT 1")
     ShoppingItem byKeySync(String key);
 
 
     /* ---------- 쓰기 기본 ---------- */
 
-    /** 충돌 시 무시(IGNORE)로 insert */
+    @Query("SELECT * FROM shopping_items WHERE ingredientKey = :key AND checked = 0 LIMIT 1")
+    ShoppingItem findActiveByKey(String key);
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     long insert(ShoppingItem item);
 
-    /** 전체 필드 업데이트 */
     @Update
     int update(ShoppingItem item);
+
+    @Query("DELETE FROM shopping_items")
+    void clearAll();
 
 
     /* ---------- 체크/삭제 유틸 ---------- */
 
-    /** 체크 상태와 구매 수량, 갱신시각을 함께 변경 */
-    @Query("UPDATE shopping_items " +
-            "SET checked = :checked, bought_qty = :bought, updatedAt = :updatedAt " +
-            "WHERE id = :id")
-    int setChecked(long id, boolean checked, double bought, long updatedAt);
+    // 위치 안 바뀌게 updatedAt/boughtQty 건드리지 않음
+    @Query("UPDATE shopping_items SET checked = :checked WHERE id = :id")
+    int setChecked(long id, boolean checked);
 
-    /** 단건 체크 처리(구매수량은 건드리지 않음) */
-    @Query("UPDATE shopping_items SET checked = 1, updatedAt = :updatedAt WHERE id = :id")
-    int checkedSync(long id, long updatedAt);
+    // 과거 호출부 호환용(무시 파라미터)
+    @Deprecated
+    default int setChecked(long id, boolean checked, double ignoredBought, long ignoredUpdatedAt) {
+        return setChecked(id, checked);
+    }
 
-    /** 체크된 항목 모두 삭제 */
     @Query("DELETE FROM shopping_items WHERE checked = 1")
     int deleteAllChecked();
 
-    /** 체크된 항목 전부 조회(팬트리 이동용) */
     @Query("SELECT * FROM shopping_items WHERE checked = 1 ORDER BY updatedAt DESC")
     List<ShoppingItem> checkedSync();
 
-    /** 단위 업데이트 */
     @Query("UPDATE shopping_items SET unit = :unit, updatedAt = :updatedAt WHERE id = :id")
     void updateBuyUnit(long id, String unit, long updatedAt);
 
-    /** 쇼핑 리스트 삭제 */
     @Query("DELETE FROM shopping_items WHERE id IN (:ids)")
     void deleteByIds(List<Long> ids);
 
     @Query("UPDATE shopping_items SET bought_qty=:qty, unit=:unit, updatedAt=:updatedAt WHERE id=:id")
     void updateBoughtAndUnit(long id, double qty, String unit, long updatedAt);
 
-    /* ---------- 이름+단위로 가산 업서트 ---------- */
 
-    /**
-     * 주어진 리스트를 (name, unit) 기준으로 업서트하면서
-     * needed_qty 를 가산한다. 단위가 비어있지 않으면 최신 단위로 덮어씀.
-     */
+    /* ---------- 이름+단위 가산 업서트 (수동 추가 등) ---------- */
+
     @Transaction
     default void upsertAddAll(List<ShoppingItem> list) {
         if (list == null) return;
@@ -100,20 +101,62 @@ public interface ShoppingDao {
                 in.name = name;
                 in.unit = (unit == null || unit.isEmpty()) ? null : unit;
                 in.updatedAt = now;
-                // neededQty / boughtQty / checked 값은 호출부에서 준비되어 들어온다고 가정
                 insert(in);
             } else {
                 double cur = Math.max(0d, exist.neededQty);
                 double add = Math.max(0d, in.neededQty);
                 exist.neededQty = cur + add;
 
-                // 단위가 주어졌다면 최신 단위로 유지
                 if (unit != null && !unit.isEmpty()) exist.unit = unit;
                 exist.name = name;
                 exist.updatedAt = now;
 
                 update(exist);
             }
+        }
+    }
+
+
+    /* ---------- 통합 재계산 결과 반영 (entryId 없이 동작) ---------- */
+
+    /**
+     * 통합 재계산 결과(newList)로 테이블을 교체하되,
+     * 같은 ingredientKey에 대해 기존 진행상황(boughtQty, checked)을 최대한 보존한다.
+     */
+    @Transaction
+    default void replaceAllPreservingProgress(List<ShoppingItem> newList) {
+        // 1) 기존 스냅샷을 키 맵으로 만들기
+        List<ShoppingItem> old = allSync();
+        Map<String, ShoppingItem> oldMap = new HashMap<>();
+        for (ShoppingItem o : old) {
+            if (o == null) continue;
+            oldMap.put(o.ingredientKey, o);
+        }
+
+        // 2) 전체 삭제 후 새 목록 삽입
+        clearAll();
+        long now = System.currentTimeMillis();
+
+        if (newList == null) return;
+
+        for (ShoppingItem in : newList) {
+            if (in == null) continue;
+            ShoppingItem prior = oldMap.get(in.ingredientKey);
+
+            if (prior != null) {
+                // 기존 진행상황 보존 로직
+                // - 산 만큼은 유지 (새 필요량보다 큰 경우 클램프)
+                in.boughtQty = Math.min(Math.max(0d, prior.boughtQty), Math.max(0d, in.neededQty));
+                // - 예전에 이미 충분히 샀던 항목은 체크 유지, 아니면 해제
+                in.checked = prior.checked && (prior.boughtQty >= in.neededQty - 1e-6);
+                // 단위/이름은 새 계산값을 우선, 필요시 prior.unit/name을 fallback 가능
+            } else {
+                in.boughtQty = 0d;
+                in.checked = false;
+            }
+
+            in.updatedAt = now;
+            insert(in);
         }
     }
 }
