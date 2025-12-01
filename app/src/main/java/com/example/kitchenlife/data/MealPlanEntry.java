@@ -7,22 +7,18 @@ import androidx.room.Index;
 
 @Entity(
         tableName = "meal_plan_entries",
-        indices = {@Index(value = {"dateKey","mealType"})}
+        indices = {@Index(value = {"dateKey","mealType"}), @Index("recipeId")}
 )
 public class MealPlanEntry {
-    @PrimaryKey(autoGenerate = true)
-    public long id;
+    @PrimaryKey(autoGenerate = true) public long id;
 
-    // yyyymmdd (예: 20251124)
-    public long dateKey;
+    public long dateKey;   // yyyymmdd
+    public int  mealType;  // 0=아침, 1=점심, 2=저녁
 
-    // 0=Breakfast, 1=Lunch, 2=Dinner
-    public int mealType;
+    /** Supabase recipes.id (없으면 0) */
+    public long recipeId;  // ★ 추가
 
-    @NonNull
-    public String title = "";   // 메뉴명(자유 텍스트)
-
-    public String notes;        // 메모(선택)
-
-    public long createdAt;      // System.currentTimeMillis()
+    @NonNull public String title = "";  // 표시용 타이틀(캐시 실패 대비)
+    public String notes;
+    public long createdAt;
 }

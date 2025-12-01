@@ -11,14 +11,19 @@ import com.example.kitchenlife.data.MealPlanEntry;
 import com.example.kitchenlife.data.MealPlanRepository;
 import com.example.kitchenlife.data.MyMealSet;
 import com.example.kitchenlife.data.MyMealSetDao;
+import com.example.kitchenlife.data.RecipeCacheRepository;
 
 import java.util.List;
 
 /** Meal plan + My Meals(세트) 관리 ViewModel */
 public class MealPlanViewModel extends AndroidViewModel {
 
-    // ── 기존 MealPlan 저장소
+    // ── MealPlan 저장소(Room)
     private final MealPlanRepository repo;
+
+    // ── 레시피 캐시(Room) — 현재는 직접 사용 안 하지만, 확장 대비해 보유
+    @SuppressWarnings("FieldCanBeLocal")
+    private final RecipeCacheRepository cacheRepo;
 
     // ── My Meals(Room)
     private final MyMealSetDao myMealSetDao;
@@ -34,6 +39,9 @@ public class MealPlanViewModel extends AndroidViewModel {
         AppDatabase db = AppDatabase.get(app);
         myMealSetDao = db.myMealSetDao();
         myMealSets = myMealSetDao.all();
+
+        // 레시피 캐시(옵션)
+        cacheRepo = new RecipeCacheRepository(app);
     }
 
     // ─────────────────────────────
@@ -43,17 +51,23 @@ public class MealPlanViewModel extends AndroidViewModel {
         return repo.getMeals(dateKey, mealType);
     }
 
+    /** 자유 텍스트로 식단 항목 추가 */
     public void add(long dateKey, int mealType, String title) {
         MealPlanEntry e = new MealPlanEntry();
-        e.dateKey = dateKey;
-        e.mealType = mealType;
-        e.title = title;
+        e.dateKey = dateKey;           // yyyymmdd
+        e.mealType = mealType;         // 0=Breakfast,1=Lunch,2=Dinner
+        e.title = title == null ? "" : title.trim();
         e.createdAt = System.currentTimeMillis();
         repo.insert(e);
     }
 
+    /** 레시피 제목을 이용해 식단에 바로 추가 (RecipeDetail → MealPlan 연동에서 사용) */
+    public void addRecipeToMeal(long dateKey, int mealType, String recipeTitle) {
+        add(dateKey, mealType, recipeTitle);
+    }
+
     public void update(MealPlanEntry e, String newTitle) {
-        e.title = newTitle;
+        e.title = newTitle == null ? "" : newTitle.trim();
         repo.update(e);
     }
 
