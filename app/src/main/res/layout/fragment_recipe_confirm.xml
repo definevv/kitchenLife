@@ -1,21 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="wrap_content"
-    android:orientation="vertical" android:padding="16dp">
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
 
+    <!-- 제목 -->
     <TextView
         android:id="@+id/tv_title"
-        android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="Add from recipe" android:textStyle="bold" android:textSize="18sp"/>
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="레시피에서 추가"
+        android:textStyle="bold"
+        android:textSize="18sp"/>
 
+    <!-- 재료 부족 목록 -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rv_rows"
-        android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:nestedScrollingEnabled="true" android:paddingTop="8dp"/>
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:nestedScrollingEnabled="true"
+        android:paddingTop="8dp"/>
 
+    <!-- 장보기 리스트에 부족분 추가 -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_add_shortage"
         style="@style/Widget.MaterialComponents.Button"
-        android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="Add shortages to shopping" android:layout_marginTop="12dp"/>
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="부족한 재료 장보기 리스트에 추가"
+        android:layout_marginTop="12dp"/>
 </LinearLayout>
