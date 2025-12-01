@@ -15,7 +15,7 @@
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
         android:background="@color/header_gray"
-        app:title="Recipes"
+        app:title="레시피"
         app:titleTextColor="@color/text_primary"
         app:navigationIconTint="@color/text_primary" />
 
@@ -37,7 +37,7 @@
             style="@style/Widget.MaterialComponents.TextInputLayout.FilledBox.Dense"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Search recipes..."
+            android:hint="레시피 검색…"
             app:startIconDrawable="@android:drawable/ic_menu_search"
             app:endIconMode="clear_text"
             android:layout_marginBottom="8dp">
@@ -72,7 +72,7 @@
                     style="@style/Widget.MaterialComponents.Chip.Filter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="All"
+                    android:text="전체"
                     app:checkedIconVisible="false"
                     android:checkable="true"
                     android:checked="true" />
@@ -82,7 +82,7 @@
                     style="@style/Widget.MaterialComponents.Chip.Filter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Korean"
+                    android:text="한식"
                     android:checkable="true" />
 
                 <com.google.android.material.chip.Chip
@@ -90,7 +90,7 @@
                     style="@style/Widget.MaterialComponents.Chip.Filter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Easy"
+                    android:text="쉬움"
                     android:checkable="true" />
 
                 <com.google.android.material.chip.Chip
@@ -98,7 +98,7 @@
                     style="@style/Widget.MaterialComponents.Chip.Filter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="≤ 30m"
+                    android:text="≤ 30분"
                     android:checkable="true" />
             </com.google.android.material.chip.ChipGroup>
         </HorizontalScrollView>
@@ -155,7 +155,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="No recipes found"
+                    android:text="레시피가 없습니다"
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp" />
             </LinearLayout>
@@ -172,7 +172,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Failed to load recipes"
+                    android:text="레시피를 불러오지 못했습니다"
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp"
                     android:layout_marginBottom="8dp" />
@@ -181,7 +181,7 @@
                     android:id="@+id/btn_retry"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Retry" />
+                    android:text="다시 시도" />
             </LinearLayout>
         </FrameLayout>
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>

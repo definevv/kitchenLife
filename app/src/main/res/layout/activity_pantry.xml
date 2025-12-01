@@ -4,20 +4,20 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="true">   <!-- ★ 상태바 공간만큼 자동 패딩 -->
+    android:fitsSystemWindows="true">
 
     <!-- AppBar / Toolbar -->
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:fitsSystemWindows="true"> <!-- ★ 툴바도 상태바 아래로 -->
+        android:fitsSystemWindows="true">
 
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:background="@color/header_gray"
-            app:title="Pantry"
+            app:title="팬트리"
             app:titleTextColor="@color/text_primary"/>
     </com.google.android.material.appbar.AppBarLayout>
 
@@ -37,7 +37,7 @@
             android:layout_marginStart="5dp"
             android:layout_marginEnd="16dp"
             android:layout_marginBottom="2dp"
-            android:hint="Search pantry..."
+            android:hint="보관함 검색…"
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
             android:background="@android:color/white"
@@ -59,7 +59,7 @@
                 android:id="@+id/tv_select_all"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Select All"
+                android:text="전체 선택"
                 android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
                 android:textColor="?attr/colorPrimary"
                 android:clickable="true"
@@ -102,7 +102,7 @@
             app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"/>
     </LinearLayout>
 
-    <!-- FAB: anchor to content, bottom-end -->
+    <!-- FAB -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fab_add"
         android:layout_width="wrap_content"
@@ -112,7 +112,7 @@
         app:layout_anchor="@id/content"
         app:layout_anchorGravity="bottom|end"/>
 
-    <!-- BottomSheet: Add/Edit form (hidden by default) -->
+    <!-- BottomSheet: Add/Edit -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/sheet_edit"
         android:layout_width="match_parent"
@@ -133,7 +133,7 @@
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Name">
+                android:hint="이름">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/et_name"
@@ -151,7 +151,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:hint="Quantity">
+                    android:hint="수량">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/et_qty"
@@ -165,7 +165,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginStart="8dp"
-                    android:hint="Unit">
+                    android:hint="단위">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/et_unit"
@@ -180,7 +180,7 @@
                 style="@style/Widget.MaterialComponents.Button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Save"
+                android:text="저장"
                 android:layout_marginTop="12dp"/>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>

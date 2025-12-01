@@ -5,11 +5,12 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
 import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.view.ViewGroup;
-import android.widget.EditText;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -68,7 +69,7 @@ public class ShoppingActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null){
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-            getSupportActionBar().setTitle("Shopping");
+            getSupportActionBar().setTitle("장보기");
         }
 
         progress = findViewById(R.id.progress_overlay);
@@ -89,23 +90,34 @@ public class ShoppingActivity extends AppCompatActivity {
         rv.setLayoutManager(new LinearLayoutManager(this));
         rv.addItemDecoration(new DividerItemDecoration(this, DividerItemDecoration.VERTICAL));
         adapter = new ShoppingAdapter(
-                // 체크 토글 콜백
+                // ✔ 체크 토글 → DB 저장 + 즉시 UI 반영 + 목록 새로고침
                 (s, checked) -> {
                     io.execute(() -> {
                         long now = System.currentTimeMillis();
                         double keepBought = (s.boughtQty <= 0d) ? 0d : s.boughtQty;
                         shoppingDao.setChecked(s.id, checked, keepBought, now);
+                        runOnUiThread(() -> {
+                            // 로컬 모델 업데이트
+                            s.checked = checked;
+                            updateActionButtons();
+                            updateSelectAllLabel();
+                            // 새로고침(재정렬/필터 등 반영 필요시)
+                            reloadShoppingList();
+                        });
                     });
-                    updateActionButtons();
                 },
-                // 수량/단위 입력 저장 콜백
-                (s, qty, unit) -> io.execute(() ->
-                        shoppingDao.updateBoughtAndUnit(
-                                s.id,
-                                Math.max(0d, qty),
-                                (unit == null ? null : unit.trim()),
-                                System.currentTimeMillis()
-                        ))
+                // 수량/단위 저장 → DB 저장 + 메타텍스트 갱신
+                (s, qty, unit) -> io.execute(() -> {
+                    String u = (unit == null || unit.trim().isEmpty()) ? null : unit.trim();
+                    shoppingDao.updateBoughtAndUnit(
+                            s.id,
+                            Math.max(0d, qty),
+                            u,
+                            System.currentTimeMillis()
+                    );
+                    // 저장 직후 리스트 재로딩(필요 수량/구매 예정 레이블 재계산)
+                    runOnUiThread(this::reloadShoppingList);
+                })
         );
         rv.setAdapter(adapter);
 
@@ -135,7 +147,7 @@ public class ShoppingActivity extends AppCompatActivity {
 
         btnAdd.setOnClickListener(v -> showAddSheet());
         btnFromRecipe.setOnClickListener(v -> {
-            resultConsumed = false; // 새로 실행할 때만 다시 허용
+            resultConsumed = false;
             Intent it = new Intent(this, RecipePickerActivity.class);
             pickRecipeLauncher.launch(it);
         });
@@ -168,6 +180,19 @@ public class ShoppingActivity extends AppCompatActivity {
 
         // 최초 로드
         rv.postDelayed(this::reloadShoppingList, 200);
+
+        // 필요 시 Room 관찰 전환 가능(DAO에 LiveData가 있을 때)
+        // shoppingDao.observeAll().observe(this, list -> {
+        //     adapter.submit(list);
+        //     updateSelectAllLabel();
+        //     updateActionButtons();
+        // });
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        // 돌아왔을 때 반영 안되는 느낌 방지
+        reloadShoppingList();
     }
 
     @Override public boolean onOptionsItemSelected(@NonNull MenuItem item) {
@@ -196,11 +221,7 @@ public class ShoppingActivity extends AppCompatActivity {
                 if (fErr != null) {
                     Toast.makeText(this, "추가 실패: " + fErr.getMessage(), Toast.LENGTH_LONG).show();
                 } else {
-                    if (fAdded > 0) {
-                        Toast.makeText(this, "쇼핑리스트에 추가됨", Toast.LENGTH_SHORT).show();
-                    } else {
-                        Toast.makeText(this, "추가된 항목 없음", Toast.LENGTH_SHORT).show();
-                    }
+                    Toast.makeText(this, (fAdded > 0) ? "쇼핑리스트에 추가됨" : "추가된 항목 없음", Toast.LENGTH_SHORT).show();
                     reloadShoppingList();
                 }
             });
@@ -218,15 +239,14 @@ public class ShoppingActivity extends AppCompatActivity {
         View v = LayoutInflater.from(this).inflate(R.layout.sheet_add_shopping, null, false);
         dlg.setContentView(v);
 
-        final TextView etName = v.findViewById(R.id.et_item_name);
-        final TextView etQty  = v.findViewById(R.id.et_item_qty);
-        final TextView etUnit = v.findViewById(R.id.et_item_unit);
+        final EditText etName = v.findViewById(R.id.et_item_name);
+        final EditText etQty  = v.findViewById(R.id.et_item_qty);
+        final EditText etUnit = v.findViewById(R.id.et_item_unit);
 
         v.findViewById(R.id.btn_submit_item).setOnClickListener(b -> {
-            String name = etName.getText().toString().trim();
-            String unit = etUnit.getText().toString().trim();
-            double qty = 0;
-            try { qty = Double.parseDouble(etQty.getText().toString().trim()); } catch (Exception ignored) {}
+            String name = safe(etName.getText());
+            String unit = safe(etUnit.getText());
+            double qty  = parseDoubleSafe(etQty.getText());
 
             if (name.isEmpty() || qty <= 0) {
                 Toast.makeText(this, "이름과 수량을 입력하세요", Toast.LENGTH_SHORT).show();
@@ -234,12 +254,14 @@ public class ShoppingActivity extends AppCompatActivity {
             }
 
             final double fQty = qty;
+            final String fUnit = unit.isEmpty()? null : unit.trim();
+
             io.execute(() -> {
                 ShoppingItem s = new ShoppingItem();
                 s.ingredientKey = buildKey(null, name);
                 s.name = name;
-                s.unit = unit;
-                s.neededQty = fQty;
+                s.unit = fUnit;                  // "" 는 null 로
+                s.neededQty = Math.max(0d, fQty);
                 s.boughtQty = 0;
                 s.checked = false;
                 s.updatedAt = System.currentTimeMillis();
@@ -270,7 +292,7 @@ public class ShoppingActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 adapter.submit(items);
                 updateSelectAllLabel();
-                updateActionButtons(); // 목록 갱신 후 버튼 상태도 갱신
+                updateActionButtons();
             });
         });
     }
@@ -307,10 +329,10 @@ public class ShoppingActivity extends AppCompatActivity {
     private void updateSelectAllLabel() {
         if (tvSelectAll == null) return;
         List<ShoppingItem> data = adapter.getData();
-        if (data.isEmpty()) { tvSelectAll.setText("Select All"); return; }
+        if (data.isEmpty()) { tvSelectAll.setText("전체 선택"); return; }
         boolean allChecked = true;
         for (ShoppingItem s : data) { if (!s.checked) { allChecked = false; break; } }
-        tvSelectAll.setText(allChecked ? "Unselect All" : "Select All");
+        tvSelectAll.setText(allChecked ? "전체 취소" : "전체 선택");
     }
 
     /* ---------------- 버튼 활성화/비활성 갱신 ---------------- */
@@ -351,6 +373,8 @@ public class ShoppingActivity extends AppCompatActivity {
 
     private void moveCheckedToPantry() {
         showProgress(true);
+        View currentFocus = getCurrentFocus();
+        if (currentFocus != null) currentFocus.clearFocus();
         io.execute(() -> {
             try {
                 // 1) 체크된 쇼핑 항목 조회
@@ -367,7 +391,7 @@ public class ShoppingActivity extends AppCompatActivity {
                 List<PantryItem> toUpsert = new ArrayList<>();
                 long now = System.currentTimeMillis();
                 for (ShoppingItem s : checked) {
-                    double planned = (s.boughtQty > 0d ? s.boughtQty : s.neededQty); // 핵심
+                    double planned = (s.boughtQty > 0d ? s.boughtQty : s.neededQty);
                     PantryItem p = new PantryItem();
                     p.ingredientKey = s.ingredientKey;
                     p.name = s.name;
@@ -428,8 +452,8 @@ public class ShoppingActivity extends AppCompatActivity {
                 tvName = v.findViewById(R.id.tv_name);
                 tvMeta = v.findViewById(R.id.tv_meta);
                 cb     = v.findViewById(R.id.cb);
-                etQty  = v.findViewById(R.id.et_buy_qty);   // ← 수량 입력
-                etUnit = v.findViewById(R.id.et_buy_unit);  // ← 단위 입력
+                etQty  = v.findViewById(R.id.et_buy_qty);   // 수량 입력 (ID 고정)
+                etUnit = v.findViewById(R.id.et_buy_unit);  // 단위 입력 (ID 고정)
             }
         }
 
@@ -439,48 +463,76 @@ public class ShoppingActivity extends AppCompatActivity {
             return new VH(v);
         }
 
-        @Override public void onBindViewHolder(@NonNull VH h, int i) {
+        @Override
+        public void onBindViewHolder(@NonNull VH h, int i) {
             ShoppingItem s = data.get(i);
-            h.tvName.setText(s.name);
-            String unitSuffix = (s.unit == null || s.unit.isEmpty()) ? "" : (" " + s.unit);
-            h.tvMeta.setText("need " + s.neededQty + unitSuffix);
 
-            // 체크박스 상태 바인딩
+            h.tvName.setText(s.name);
+
+            // 메타: 구매예정(boughtQty) 우선, 없으면 need
+            String unitSuffix = (s.unit == null || s.unit.isEmpty()) ? "" : (" " + s.unit);
+            double planned = (s.boughtQty > 0d ? s.boughtQty : s.neededQty);
+            String label   = (s.boughtQty > 0d) ? "구매 예정 " : "필요 ";
+            h.tvMeta.setText(label + trimZero(planned) + unitSuffix);
+
+            // 체크박스 (저장 포함)
             h.cb.setOnCheckedChangeListener(null);
             h.cb.setChecked(s.checked);
-            h.cb.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                s.checked = isChecked; // 로컬 즉시 반영
-                if (onToggle != null) onToggle.onToggleChecked(s, isChecked);
+            h.cb.setOnCheckedChangeListener((btn, checked) -> {
+                s.checked = checked;
+                if (onToggle != null) onToggle.onToggleChecked(s, checked);
             });
-
-            // 행 클릭도 체크 토글
             h.itemView.setOnClickListener(v -> h.cb.setChecked(!h.cb.isChecked()));
 
-            // ----- 수량/단위: 입력값 우선 노출 -----
+            // 수량/단위 표시
             h.etQty.setText(s.boughtQty > 0 ? trimZero(s.boughtQty) : "");
             h.etUnit.setText(s.unit == null ? "" : s.unit);
 
-            // 포커스 해제 시 저장(불필요한 다중 저장 방지)
-            View.OnFocusChangeListener saver = (v, hasFocus) -> {
-                if (hasFocus || onEdit == null) return;
-                double q = parseDoubleSafe(h.etQty.getText().toString());
-                String u = h.etUnit.getText().toString();
+            // 저장 로직
+            Runnable persistAndRefresh = () -> {
+                double q = parseDoubleSafe(h.etQty.getText());
+                String u = safe(h.etUnit.getText());
                 s.boughtQty = Math.max(0d, q);
-                s.unit = (u == null ? null : u.trim());
-                onEdit.onQtyUnitChanged(s, s.boughtQty, s.unit);
+                s.unit = (u.isEmpty()? null : u);
+                if (onEdit != null) onEdit.onQtyUnitChanged(s, s.boughtQty, s.unit);
+
+                String unitNow = (s.unit == null || s.unit.isEmpty()) ? "" : (" " + s.unit);
+                double p2 = (s.boughtQty > 0d ? s.boughtQty : s.neededQty);
+                String labelNow = (s.boughtQty > 0d) ? "구매 예정 " : "필요 ";
+                h.tvMeta.setText(labelNow + trimZero(p2) + unitNow);
             };
-            h.etQty.setOnFocusChangeListener(saver);
-            h.etUnit.setOnFocusChangeListener(saver);
+
+            // 포커스 해제 시 저장
+            View.OnFocusChangeListener focusSaver = (v, hasFocus) -> { if (!hasFocus) persistAndRefresh.run(); };
+            h.etQty.setOnFocusChangeListener(focusSaver);
+            h.etUnit.setOnFocusChangeListener(focusSaver);
+
+            // IME 완료 시 저장
+            TextView.OnEditorActionListener imeDoneSaver = (tv, actionId, event) -> {
+                if (actionId == EditorInfo.IME_ACTION_DONE) { persistAndRefresh.run(); return true; }
+                return false;
+            };
+            h.etQty.setOnEditorActionListener(imeDoneSaver);
+            h.etUnit.setOnEditorActionListener(imeDoneSaver);
         }
 
         @Override public int getItemCount() { return data.size(); }
 
-        private static double parseDoubleSafe(String s){
-            try { return Double.parseDouble(s.trim()); } catch (Exception e){ return 0d; }
+        private static double parseDoubleSafe(CharSequence s){
+            try { return Double.parseDouble(s.toString().trim()); } catch (Exception e){ return 0d; }
         }
         private static String trimZero(double v){
             String t = String.valueOf(v);
             return t.endsWith(".0") ? t.substring(0, t.length()-2) : t;
         }
+        private static String safe(CharSequence cs){ return cs==null? "" : cs.toString().trim(); }
+    }
+
+    /* ---------------- 유틸 ---------------- */
+
+    private static String safe(CharSequence cs){ return cs==null? "" : cs.toString().trim(); }
+
+    private static double parseDoubleSafe(CharSequence cs){
+        try { return Double.parseDouble(safe(cs)); } catch (Exception e){ return 0d; }
     }
 }

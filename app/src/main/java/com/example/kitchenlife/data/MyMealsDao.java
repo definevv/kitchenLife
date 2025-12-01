@@ -10,7 +10,7 @@ import androidx.room.Query;
 import java.util.List;
 
 @Dao
-public interface MyMealSetDao {
+public interface MyMealsDao {
 
     @Query("SELECT * FROM my_meal_sets ORDER BY name COLLATE NOCASE ASC")
     LiveData<List<MyMealSet>> observeAll();

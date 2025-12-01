@@ -60,7 +60,7 @@ public class PantryActivity extends AppCompatActivity {
         setSupportActionBar(tb);
         if (getSupportActionBar() != null) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-            getSupportActionBar().setTitle("Pantry");
+            getSupportActionBar().setTitle("보관함");
         }
         tb.setNavigationOnClickListener(v -> getOnBackPressedDispatcher().onBackPressed());
 
@@ -167,7 +167,7 @@ public class PantryActivity extends AppCompatActivity {
 
         boolean allChecked = !shown.isEmpty();
         for (PantryItem p : shown) { if (!p.checked) { allChecked = false; break; } }
-        if (tvSelectAll != null) tvSelectAll.setText(allChecked ? "Unselect All" : "Select All");
+        if (tvSelectAll != null) tvSelectAll.setText(allChecked ? "전체 취소" : "전체 선택");
     }
 
     /* ---- TextWatcher 축약 헬퍼 ---- */
