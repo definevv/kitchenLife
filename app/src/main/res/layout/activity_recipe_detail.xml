@@ -235,7 +235,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="레시피 보기" />
+            android:text="핸즈프리 요리 모드" />
     </LinearLayout>
 
 </LinearLayout>
