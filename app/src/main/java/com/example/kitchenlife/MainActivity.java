@@ -3,16 +3,20 @@ package com.example.kitchenlife;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
+import android.view.Window;
+
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.cardview.widget.CardView;
+import androidx.core.content.ContextCompat;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
+import com.example.kitchenlife.ui.pantry.PantryActivity;
+
+import com.example.kitchenlife.ui.RecipesActivity; // ✅ 새 버전 명시
 import com.google.android.material.navigation.NavigationView;
-import android.view.Window;
-import androidx.core.content.ContextCompat;
 
 public class MainActivity extends AppCompatActivity implements NavigationView.OnNavigationItemSelectedListener {
 
@@ -24,17 +28,13 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         setContentView(R.layout.activity_main);
 
         Window window = getWindow();
-        window.setStatusBarColor(
-                ContextCompat.getColor(this, R.color.header_gray)
-        );
+        window.setStatusBarColor(ContextCompat.getColor(this, R.color.header_gray));
 
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
         drawerLayout = findViewById(R.id.drawer_layout);
-        drawerLayout.setStatusBarBackgroundColor(
-                ContextCompat.getColor(this, R.color.header_gray)
-        );
+        drawerLayout.setStatusBarBackgroundColor(ContextCompat.getColor(this, R.color.header_gray));
 
         NavigationView navigationView = findViewById(R.id.nav_view);
         navigationView.setNavigationItemSelectedListener(this);
@@ -52,28 +52,18 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         CardView pantryCard = findViewById(R.id.pantry_quick_action);
         CardView shoppingCard = findViewById(R.id.shopping_quick_action);
 
-        pantryCard.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, PantryActivity.class));
-            }
-        });
+        pantryCard.setOnClickListener(v ->
+                startActivity(new Intent(MainActivity.this, PantryActivity.class)));
 
-        shoppingCard.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, ShoppingActivity.class));
-            }
-        });
+        shoppingCard.setOnClickListener(v ->
+                startActivity(new Intent(MainActivity.this, ShoppingActivity.class)));
     }
 
-    // ====== Overflow(점 세줄) 완전 비활성화 ======
+    // Overflow 메뉴 비활성화
     @Override
     public boolean onCreateOptionsMenu(android.view.Menu menu) {
-        // 메뉴를 만들지 않음 → overflow 아이콘 자체가 안 뜸
         return false;
     }
-    // =========================================
 
     @Override
     public boolean onNavigationItemSelected(@NonNull android.view.MenuItem item) {
@@ -82,14 +72,21 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         if (id == R.id.nav_home) {
             drawerLayout.closeDrawer(GravityCompat.START);
             return true;
+
         } else if (id == R.id.nav_meal_plan) {
             startActivity(new Intent(this, MealPlanActivity.class));
+
         } else if (id == R.id.nav_shopping) {
             startActivity(new Intent(this, ShoppingActivity.class));
+
         } else if (id == R.id.nav_recipes) {
-            startActivity(new Intent(this, RecipesActivity.class));
+            // ✅ 새 버전으로 강제 지정
+            Intent i = new Intent(this, RecipesActivity.class);
+            startActivity(i);
+
         } else if (id == R.id.nav_pantry) {
             startActivity(new Intent(this, PantryActivity.class));
+
         } else if (id == R.id.nav_stats) {
             startActivity(new Intent(this, StatsActivity.class));
         }

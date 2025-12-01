@@ -12,4 +12,12 @@
         android:text="Recipe title"
         android:textSize="16sp"
         android:textColor="@android:color/black" />
+    <TextView
+        android:id="@+id/tv_meta"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="2 servings"
+        android:textSize="12sp"
+        android:textColor="@color/text_secondary"
+        android:layout_marginTop="4dp" />
 </LinearLayout>

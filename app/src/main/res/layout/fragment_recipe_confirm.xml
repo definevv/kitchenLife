@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="vertical" android:padding="16dp">
+
+    <TextView
+        android:id="@+id/tv_title"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Add from recipe" android:textStyle="bold" android:textSize="18sp"/>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_rows"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:nestedScrollingEnabled="true" android:paddingTop="8dp"/>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_add_shortage"
+        style="@style/Widget.MaterialComponents.Button"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Add shortages to shopping" android:layout_marginTop="12dp"/>
+</LinearLayout>
