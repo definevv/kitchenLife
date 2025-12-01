@@ -73,7 +73,7 @@ public interface ShoppingDao {
     @Query("DELETE FROM shopping_items WHERE id IN (:ids)")
     void deleteByIds(List<Long> ids);
 
-    @Query("UPDATE shopping_items SET boughtQty=:qty, unit=:unit, updatedAt=:updatedAt WHERE id=:id")
+    @Query("UPDATE shopping_items SET bought_qty=:qty, unit=:unit, updatedAt=:updatedAt WHERE id=:id")
     void updateBoughtAndUnit(long id, double qty, String unit, long updatedAt);
 
     /* ---------- 이름+단위로 가산 업서트 ---------- */
